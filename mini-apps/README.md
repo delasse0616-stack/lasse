@@ -48,3 +48,8 @@ git clone https://github.com/delasse0616-stack/lasse.git
 - 외부 라이브러리·네트워크 요청 없음, 완전 오프라인 동작
 - 다크 테마, 모바일 화면 대응
 - 최신 브라우저(Chrome, Edge, Firefox, Safari)에서 동작
+
+
+## 라이선스
+
+MIT — 저장소 루트의 [LICENSE](../LICENSE) 파일을 참고하세요.
