@@ -6,7 +6,7 @@
 ## 실행 방법
 
 ```
-git clone <this-repo>
+git clone https://github.com/delasse0616-stack/lasse.git
 ```
 
 받은 폴더에서 원하는 `.html` 파일을 브라우저로 열면 됩니다.
