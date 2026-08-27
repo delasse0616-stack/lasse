@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Focus Timer</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --line:#262b36; --text:#e8ebf0;
+    --muted:#8b93a1; --accent:#ff6b5b; --accent2:#4ade80; --break:#38bdf8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text); min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
+    display:flex; flex-direction:column; align-items:center; padding:32px 16px 60px;
+  }
+  h1{font-size:15px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:28px}
+  .modes{display:flex;gap:8px;margin-bottom:26px}
+  .modes button{
+    background:var(--panel);color:var(--muted);border:1px solid var(--line);
+    padding:8px 16px;border-radius:999px;font-size:13px;cursor:pointer;transition:.15s;
+  }
+  .modes button.active{color:var(--text);border-color:var(--accent);background:#241a19}
+  .modes button.active[data-mode="short"],.modes button.active[data-mode="long"]{border-color:var(--break);background:#15242e}
+  .ring-wrap{position:relative;width:280px;height:280px;margin-bottom:8px}
+  svg{transform:rotate(-90deg)}
+  .track{stroke:var(--line);fill:none}
+  .prog{stroke:var(--accent);fill:none;stroke-linecap:round;transition:stroke-dashoffset .3s linear,stroke .3s}
+  .time{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .time .clock{font-size:56px;font-weight:300;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+  .time .label{font-size:12px;color:var(--muted);letter-spacing:.2em;text-transform:uppercase;margin-top:6px}
+  .controls{display:flex;gap:12px;margin:22px 0 34px}
+  .controls button{
+    border:1px solid var(--line);background:var(--panel);color:var(--text);
+    padding:12px 30px;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer;transition:.15s;
+  }
+  .controls button.primary{background:var(--accent);border-color:var(--accent);color:#1a0d0b}
+  .controls button:hover{transform:translateY(-1px)}
+  .controls button:active{transform:translateY(0)}
+  .stats{display:flex;gap:28px;color:var(--muted);font-size:13px;margin-bottom:34px}
+  .stats b{color:var(--text);font-size:16px}
+  .tasks{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px}
+  .tasks h2{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  .add{display:flex;gap:8px;margin-bottom:12px}
+  .add input{
+    flex:1;background:var(--bg);border:1px solid var(--line);color:var(--text);
+    padding:10px 12px;border-radius:10px;font-size:14px;outline:none;
+  }
+  .add input:focus{border-color:var(--accent)}
+  .add button{background:var(--accent);border:none;color:#1a0d0b;padding:0 16px;border-radius:10px;font-weight:700;cursor:pointer}
+  ul{list-style:none}
+  li{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--line);font-size:14px}
+  li:last-child{border-bottom:none}
+  li input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent2);cursor:pointer;flex-shrink:0}
+  li span{flex:1;word-break:break-all}
+  li.done span{color:var(--muted);text-decoration:line-through}
+  li .pom{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+  li button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;line-height:1}
+  li button:hover{color:var(--accent)}
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:14px}
+</style>
+</head>
+<body>
+  <h1>Focus Timer</h1>
+
+  <div class="modes">
+    <button data-mode="focus" class="active">집중 25</button>
+    <button data-mode="short">휴식 5</button>
+    <button data-mode="long">긴 휴식 15</button>
+  </div>
+
+  <div class="ring-wrap">
+    <svg width="280" height="280" viewBox="0 0 280 280">
+      <circle class="track" cx="140" cy="140" r="130" stroke-width="14"/>
+      <circle class="prog" cx="140" cy="140" r="130" stroke-width="14"
+              stroke-dasharray="816.8" stroke-dashoffset="0"/>
+    </svg>
+    <div class="time">
+      <div class="clock" id="clock">25:00</div>
+      <div class="label" id="phaseLabel">집중</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="startBtn">시작</button>
+    <button id="resetBtn">리셋</button>
+  </div>
+
+  <div class="stats">
+    <div>오늘 완료한 뽀모도로 <b id="statPom">0</b></div>
+    <div>집중 시간 <b id="statMin">0</b>분</div>
+  </div>
+
+  <div class="tasks">
+    <h2>할 일</h2>
+    <form class="add" id="addForm">
+      <input id="taskInput" placeholder="할 일을 입력하고 Enter" maxlength="120" autocomplete="off">
+      <button type="submit">추가</button>
+    </form>
+    <ul id="taskList"></ul>
+    <div class="empty" id="emptyMsg">아직 할 일이 없어요.</div>
+  </div>
+
+<script>
+(() => {
+  const DURATIONS = { focus: 25*60, short: 5*60, long: 15*60 };
+  const LABELS = { focus:'집중', short:'휴식', long:'긴 휴식' };
+  const COLORS = { focus:'#ff6b5b', short:'#38bdf8', long:'#38bdf8' };
+  const CIRC = 2 * Math.PI * 130;
+
+  const $ = s => document.querySelector(s);
+  const clockEl = $('#clock'), progEl = $('.prog'), phaseEl = $('#phaseLabel');
+  const startBtn = $('#startBtn'), resetBtn = $('#resetBtn');
+  const statPom = $('#statPom'), statMin = $('#statMin');
+  const listEl = $('#taskList'), emptyMsg = $('#emptyMsg');
+
+  let mode = 'focus';
+  let remaining = DURATIONS[mode];
+  let running = false;
+  let ticker = null;
+  let endAt = 0;
+
+  // ---- persistence ----
+  const safeGet = k => { try { return localStorage.getItem(k); } catch(e){ return null; } };
+  const safeSet = (k,v) => { try { localStorage.setItem(k,v); } catch(e){} };
+  const parse = (raw, fb) => { try { return JSON.parse(raw) ?? fb; } catch(e){ return fb; } };
+
+  const todayKey = 'ft-' + new Date().toISOString().slice(0,10);
+  const store = parse(safeGet('focusTimer'), {});
+  if (!store[todayKey]) store[todayKey] = { pom:0, min:0 };
+  let tasks = parse(safeGet('focusTimerTasks'), []);
+
+  const save = () => {
+    safeSet('focusTimer', JSON.stringify(store));
+    safeSet('focusTimerTasks', JSON.stringify(tasks));
+  };
+
+  // ---- rendering ----
+  function fmt(s){
+    const m = Math.floor(s/60), sec = s%60;
+    return String(m).padStart(2,'0') + ':' + String(sec).padStart(2,'0');
+  }
+  function render(){
+    clockEl.textContent = fmt(remaining);
+    phaseEl.textContent = LABELS[mode];
+    const frac = remaining / DURATIONS[mode];
+    progEl.style.strokeDashoffset = CIRC * (1 - frac);
+    progEl.style.stroke = COLORS[mode];
+    document.title = (running ? '▶ ' : '') + fmt(remaining) + ' · ' + LABELS[mode];
+    startBtn.textContent = running ? '일시정지' : '시작';
+    statPom.textContent = store[todayKey].pom;
+    statMin.textContent = store[todayKey].min;
+  }
+  progEl.setAttribute('stroke-dasharray', CIRC.toFixed(1));
+
+  // ---- timer ----
+  function tick(){
+    remaining = Math.max(0, Math.round((endAt - Date.now())/1000));
+    if (remaining <= 0){ complete(); return; }
+    render();
+  }
+  function start(){
+    if (running){ pause(); return; }
+    running = true;
+    endAt = Date.now() + remaining*1000;
+    ticker = setInterval(tick, 250);
+    render();
+  }
+  function pause(){
+    running = false;
+    clearInterval(ticker);
+    render();
+  }
+  function reset(){
+    pause();
+    remaining = DURATIONS[mode];
+    render();
+  }
+  function complete(){
+    pause();
+    beep();
+    notify(mode === 'focus' ? '집중 완료! 잠깐 쉬어요 ☕' : '휴식 끝! 다시 집중해볼까요 🔥');
+    if (mode === 'focus'){
+      store[todayKey].pom += 1;
+      store[todayKey].min += Math.round(DURATIONS.focus/60);
+      const active = tasks.find(t => t.active && !t.done);
+      if (active) active.pom = (active.pom||0) + 1;
+      save(); renderTasks();
+      setMode(store[todayKey].pom % 4 === 0 ? 'long' : 'short');
+    } else {
+      setMode('focus');
+    }
+  }
+  function setMode(m){
+    mode = m;
+    document.querySelectorAll('.modes button').forEach(b =>
+      b.classList.toggle('active', b.dataset.mode === m));
+    reset();
+  }
+
+  // ---- feedback ----
+  let actx;
+  function beep(){
+    try{
+      actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+      [0,0.18,0.36].forEach((t,i) => {
+        const o = actx.createGain(), s = actx.createOscillator();
+        s.type = 'sine'; s.frequency.value = 660 + i*220;
+        s.connect(o); o.connect(actx.destination);
+        o.gain.setValueAtTime(0.001, actx.currentTime+t);
+        o.gain.exponentialRampToValueAtTime(0.25, actx.currentTime+t+0.02);
+        o.gain.exponentialRampToValueAtTime(0.001, actx.currentTime+t+0.16);
+        s.start(actx.currentTime+t); s.stop(actx.currentTime+t+0.18);
+      });
+    }catch(e){}
+  }
+  function notify(msg){
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') new Notification(msg);
+    else if (Notification.permission !== 'denied') Notification.requestPermission();
+  }
+
+  // ---- tasks ----
+  function renderTasks(){
+    listEl.innerHTML = '';
+    emptyMsg.style.display = tasks.length ? 'none' : 'block';
+    tasks.forEach((t, i) => {
+      const li = document.createElement('li');
+      if (t.done) li.className = 'done';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.checked = t.done;
+      cb.onchange = () => { t.done = cb.checked; t.active = false; save(); renderTasks(); };
+      const span = document.createElement('span');
+      span.textContent = t.text;
+      span.title = '클릭하면 현재 집중 대상으로 지정';
+      span.style.cursor = 'pointer';
+      if (t.active && !t.done) span.style.color = 'var(--accent)';
+      span.onclick = () => { tasks.forEach(x => x.active = false); t.active = !t.done; save(); renderTasks(); };
+      const pom = document.createElement('span');
+      pom.className = 'pom';
+      pom.textContent = t.pom ? '🍅'.repeat(Math.min(t.pom,5)) + (t.pom>5?`×${t.pom}`:'') : '';
+      const del = document.createElement('button');
+      del.textContent = '×';
+      del.onclick = () => { tasks.splice(i,1); save(); renderTasks(); };
+      li.append(cb, span, pom, del);
+      listEl.appendChild(li);
+    });
+  }
+  $('#addForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const input = $('#taskInput');
+    const text = input.value.trim();
+    if (!text) return;
+    tasks.push({ text, done:false, active:false, pom:0 });
+    input.value = '';
+    save(); renderTasks();
+  });
+
+  // ---- wire up ----
+  startBtn.onclick = start;
+  resetBtn.onclick = reset;
+  document.querySelectorAll('.modes button').forEach(b =>
+    b.onclick = () => setMode(b.dataset.mode));
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && e.target.tagName !== 'INPUT'){ e.preventDefault(); start(); }
+  });
+
+  renderTasks();
+  render();
+})();
+</script>
+</body>
+</html>

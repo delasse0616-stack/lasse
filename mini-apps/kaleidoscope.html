@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kaleidoscope Pad</title>
+<style>
+  :root{ --bg:#0c0c10; --panel:#15151c; --line:#2a2a36; --text:#e8ebf0; --muted:#8b8b99; --accent:#c084fc; }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--text); overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;
+    display:flex; align-items:center; justify-content:center;
+  }
+  canvas{ display:block; touch-action:none; cursor:crosshair; }
+  .panel{
+    position:fixed; left:50%; bottom:20px; transform:translateX(-50%);
+    display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:center;
+    background:rgba(21,21,28,.82); backdrop-filter:blur(10px);
+    border:1px solid var(--line); border-radius:16px; padding:12px 18px; max-width:94vw;
+  }
+  .grp{display:flex;align-items:center;gap:9px;font-size:12px;color:var(--muted)}
+  .grp label{letter-spacing:.06em;text-transform:uppercase;font-size:11px}
+  input[type=range]{width:104px;accent-color:var(--accent)}
+  .val{color:var(--text);font-variant-numeric:tabular-nums;min-width:26px;text-align:right}
+  button{
+    background:var(--panel); border:1px solid var(--line); color:var(--text);
+    padding:8px 14px; border-radius:10px; font-size:13px; cursor:pointer; transition:.15s;
+  }
+  button:hover{border-color:var(--accent);color:var(--accent)}
+  button.on{background:#241a2e;border-color:var(--accent);color:var(--accent)}
+  .hint{
+    position:fixed; top:16px; left:50%; transform:translateX(-50%);
+    font-size:12px; color:var(--muted); letter-spacing:.05em; pointer-events:none;
+    transition:opacity .6s; text-align:center;
+  }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div class="hint" id="hint">마우스나 손가락으로 그려보세요 · 대칭의 만화경이 펼쳐집니다</div>
+
+  <div class="panel">
+    <div class="grp">
+      <label>대칭</label>
+      <input type="range" id="seg" min="2" max="24" value="8">
+      <span class="val" id="segVal">8</span>
+    </div>
+    <div class="grp">
+      <label>굵기</label>
+      <input type="range" id="size" min="1" max="40" value="6">
+      <span class="val" id="sizeVal">6</span>
+    </div>
+    <div class="grp">
+      <label>잔상</label>
+      <input type="range" id="fade" min="0" max="20" value="4">
+      <span class="val" id="fadeVal">4</span>
+    </div>
+    <button id="mirror" class="on">거울 ⟷</button>
+    <button id="rainbow" class="on">무지개 🌈</button>
+    <button id="clear">지우기</button>
+    <button id="save">PNG 저장</button>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const $ = id => document.getElementById(id);
+
+  let W, H, cx, cy;
+  function resize(){
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    cx = W/2; cy = H/2;
+    ctx.fillStyle = '#0c0c10';
+    ctx.fillRect(0,0,W,H);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const cfg = { seg:8, size:6, fade:4, mirror:true, rainbow:true };
+  const bind = (id, key, fn) => {
+    const el = $(id), out = $(id+'Val');
+    el.addEventListener('input', () => {
+      cfg[key] = +el.value;
+      if (out) out.textContent = el.value;
+      fn && fn();
+    });
+  };
+  bind('seg','seg'); bind('size','size'); bind('fade','fade');
+  const toggle = (id, key) => $(id).addEventListener('click', () => {
+    cfg[key] = !cfg[key];
+    $(id).classList.toggle('on', cfg[key]);
+  });
+  toggle('mirror','mirror'); toggle('rainbow','rainbow');
+
+  $('clear').onclick = () => { ctx.fillStyle = '#0c0c10'; ctx.fillRect(0,0,W,H); };
+  $('save').onclick = () => {
+    const a = document.createElement('a');
+    a.download = 'kaleidoscope-' + Date.now() + '.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  };
+
+  let drawing = false, prev = null, hue = 0;
+  const hint = $('hint');
+
+  function pos(e){
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX, y: t.clientY };
+  }
+  function stamp(p1, p2){
+    hue = (hue + 1.5) % 360;
+    const color = cfg.rainbow
+      ? `hsl(${hue},85%,62%)`
+      : `hsl(${(Math.atan2(p2.y-cy,p2.x-cx)*180/Math.PI+360)%360},70%,60%)`;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = cfg.size;
+    ctx.lineCap = 'round';
+    ctx.shadowBlur = cfg.size * 1.4;
+    ctx.shadowColor = color;
+
+    const step = (Math.PI * 2) / cfg.seg;
+    const a1 = p1.x - cx, b1 = p1.y - cy;
+    const a2 = p2.x - cx, b2 = p2.y - cy;
+
+    for (let i = 0; i < cfg.seg; i++){
+      const ang = step * i;
+      const cos = Math.cos(ang), sin = Math.sin(ang);
+      drawSeg(a1*cos - b1*sin, a1*sin + b1*cos, a2*cos - b2*sin, a2*sin + b2*cos);
+      if (cfg.mirror){
+        drawSeg(a1*cos + b1*sin, a1*sin - b1*cos, a2*cos + b2*sin, a2*sin - b2*cos);
+      }
+    }
+    ctx.shadowBlur = 0;
+  }
+  function drawSeg(x1,y1,x2,y2){
+    ctx.beginPath();
+    ctx.moveTo(cx + x1, cy + y1);
+    ctx.lineTo(cx + x2, cy + y2);
+    ctx.stroke();
+  }
+
+  function down(e){
+    e.preventDefault();
+    drawing = true;
+    prev = pos(e);
+    hint.style.opacity = 0;
+  }
+  function move(e){
+    if (!drawing) return;
+    e.preventDefault();
+    const p = pos(e);
+    stamp(prev, p);
+    prev = p;
+  }
+  function up(){ drawing = false; prev = null; }
+
+  canvas.addEventListener('mousedown', down);
+  canvas.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', up);
+  canvas.addEventListener('touchstart', down, {passive:false});
+  canvas.addEventListener('touchmove', move, {passive:false});
+  window.addEventListener('touchend', up);
+
+  // slow fade loop for trails
+  (function loop(){
+    if (cfg.fade > 0){
+      ctx.fillStyle = `rgba(12,12,16,${cfg.fade/100})`;
+      ctx.fillRect(0,0,W,H);
+    }
+    requestAnimationFrame(loop);
+  })();
+})();
+</script>
+</body>
+</html>
